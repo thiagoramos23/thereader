@@ -30,3 +30,13 @@ npm run dev
 npm run test
 npm run test:e2e -w apps/web
 ```
+
+## Troubleshooting
+
+If you switch Node versions and see a `better-sqlite3` `NODE_MODULE_VERSION` error, run:
+
+```bash
+npm run rebuild:native
+```
+
+`npm run dev` already runs this automatically before starting the API/web processes.
