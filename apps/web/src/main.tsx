@@ -8,7 +8,7 @@ import { GatewayProvider } from "./lib/gatewayContext";
 import "./styles/main.css";
 
 const queryClient = new QueryClient();
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4001";
 const gateway = new HttpContentGateway(apiBaseUrl);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
