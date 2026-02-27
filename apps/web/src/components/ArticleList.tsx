@@ -5,9 +5,10 @@ import { ArticleRow } from "./ArticleRow";
 interface ArticleListProps {
   items: SearchResult[];
   selectedId?: string;
+  onArticleOpen: (articleId: string) => void;
 }
 
-export function ArticleList({ items, selectedId }: ArticleListProps) {
+export function ArticleList({ items, selectedId, onArticleOpen }: ArticleListProps) {
   if (items.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border/80 bg-panel/70 p-6 text-sm text-textMuted">
@@ -19,7 +20,12 @@ export function ArticleList({ items, selectedId }: ArticleListProps) {
   return (
     <div className="space-y-2">
       {items.map((article) => (
-        <ArticleRow key={article.id} article={article} active={article.id === selectedId} />
+        <ArticleRow
+          key={article.id}
+          article={article}
+          active={article.id === selectedId}
+          onOpen={onArticleOpen}
+        />
       ))}
     </div>
   );

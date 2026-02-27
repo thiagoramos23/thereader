@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Inbox, Menu, Plus, Search, Settings } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
@@ -13,6 +13,38 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useContentGateway } from "../lib/gatewayContext";
 
 const LIST_QUERY_KEY = "articles";
+const LIST_VIEW_STATE_KEY = "reader:list-view-state";
+
+interface ListViewState {
+  search: string;
+  scrollTop: number;
+}
+
+function readListViewState(): ListViewState | null {
+  try {
+    const raw = sessionStorage.getItem(LIST_VIEW_STATE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<ListViewState>;
+
+    if (typeof parsed.search !== "string" || typeof parsed.scrollTop !== "number") {
+      return null;
+    }
+
+    return { search: parsed.search, scrollTop: parsed.scrollTop };
+  } catch {
+    return null;
+  }
+}
+
+function persistListViewState(state: ListViewState) {
+  try {
+    sessionStorage.setItem(LIST_VIEW_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignore storage errors; navigation should still proceed.
+  }
+}
 
 function LeftRail() {
   const items = [
@@ -54,8 +86,11 @@ function ListPane({
 }) {
   const gateway = useContentGateway();
   const queryClient = useQueryClient();
-
-  const [search, setSearch] = useState("");
+  const [initialListState] = useState<ListViewState | null>(() => readListViewState());
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const pendingScrollRestoreRef = useRef<number | null>(initialListState?.scrollTop ?? null);
+  const searchRef = useRef(initialListState?.search ?? "");
+  const [search, setSearch] = useState(() => searchRef.current);
   const [showImport, setShowImport] = useState(!compact);
 
   const listQuery = useQuery({
@@ -71,9 +106,45 @@ function ListPane({
   });
 
   const headerTabs = useMemo(() => ["Library", "Later", "Archive"], []);
+  const handleSearchChange = useCallback((value: string) => {
+    searchRef.current = value;
+    setSearch(value);
+  }, []);
+
+  const handleArticleOpen = useCallback(
+    (_articleId: string) => {
+      persistListViewState({
+        search: searchRef.current,
+        scrollTop: scrollContainerRef.current?.scrollTop ?? 0
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!listQuery.isSuccess || pendingScrollRestoreRef.current === null) {
+      return;
+    }
+
+    const restoreScrollTop = pendingScrollRestoreRef.current;
+    const applyScrollRestore = () => {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = restoreScrollTop;
+      }
+    };
+
+    applyScrollRestore();
+    const frame = window.requestAnimationFrame(() => {
+      applyScrollRestore();
+    });
+
+    pendingScrollRestoreRef.current = null;
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [listQuery.dataUpdatedAt, listQuery.isSuccess]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-3">
       <Panel className="sticky top-0 z-20 border border-border/80 bg-panel/95 p-3 backdrop-blur">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-1">
@@ -111,10 +182,10 @@ function ListPane({
           </div>
         ) : null}
 
-        <SearchBox value={search} onChange={setSearch} />
+        <SearchBox value={search} onChange={handleSearchChange} />
       </Panel>
 
-      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+      <div ref={scrollContainerRef} data-testid="article-list-scroll" className="min-h-0 flex-1 overflow-y-auto pr-1">
         {listQuery.isLoading ? (
           <div className="rounded-xl border border-border/70 bg-panel/80 p-4 text-sm text-textMuted">
             Loading articles...
@@ -124,7 +195,11 @@ function ListPane({
             {(listQuery.error as Error).message}
           </div>
         ) : (
-          <ArticleList items={listQuery.data?.results ?? []} selectedId={selectedId} />
+          <ArticleList
+            items={listQuery.data?.results ?? []}
+            selectedId={selectedId}
+            onArticleOpen={handleArticleOpen}
+          />
         )}
       </div>
     </div>
@@ -174,22 +249,32 @@ export function LibraryRoute() {
     enabled: Boolean(articleId)
   });
 
-  if (isDesktop) {
+  if (articleId) {
+    if (isDesktop) {
+      return (
+        <div className="flex h-screen overflow-hidden">
+          <LeftRail />
+          <main className="flex min-h-0 flex-1 p-3">
+            <ArticleDetailPane article={detailQuery.data} loading={detailQuery.isLoading} showBackLink />
+          </main>
+        </div>
+      );
+    }
+
     return (
-      <div className="flex h-screen overflow-hidden">
-        <LeftRail />
-        <main className="grid min-h-0 flex-1 grid-cols-[minmax(420px,1fr)_minmax(480px,1.1fr)] gap-3 p-3">
-          <ListPane selectedId={articleId} />
-          <ArticleDetailPane article={detailQuery.data} loading={detailQuery.isLoading} />
-        </main>
+      <div className="h-screen overflow-hidden bg-bg">
+        <ArticleDetailPane article={detailQuery.data} loading={detailQuery.isLoading} compact showBackLink />
       </div>
     );
   }
 
-  if (articleId) {
+  if (isDesktop) {
     return (
-      <div className="h-screen overflow-hidden bg-bg">
-        <ArticleDetailPane article={detailQuery.data} loading={detailQuery.isLoading} compact />
+      <div className="flex h-screen overflow-hidden">
+        <LeftRail />
+        <main className="flex min-h-0 flex-1 p-3">
+          <ListPane />
+        </main>
       </div>
     );
   }
@@ -215,7 +300,7 @@ export function LibraryRoute() {
       </header>
 
       <main className="h-[calc(100vh-61px)] p-3 md:px-5 md:py-4">
-        <ListPane compact selectedId={articleId} />
+        <ListPane compact />
       </main>
     </div>
   );

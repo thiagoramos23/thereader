@@ -106,6 +106,7 @@ function renderRoute(initialEntry: string) {
 
 describe("LibraryRoute", () => {
   beforeEach(() => {
+    sessionStorage.clear();
     window.innerWidth = 390;
   });
 
@@ -128,5 +129,41 @@ describe("LibraryRoute", () => {
 
     expect(await screen.findByText("Back to list")).toBeInTheDocument();
     expect(await screen.findByText("Full article body")).toBeInTheDocument();
+  });
+
+  it("renders list-only view on desktop when no article is selected", async () => {
+    window.innerWidth = 1440;
+    renderRoute("/");
+
+    expect(await screen.findByText("React RSS Reader")).toBeInTheDocument();
+    expect(screen.queryByText("Select an article to read.")).not.toBeInTheDocument();
+  });
+
+  it("shows in-page back navigation on desktop article detail page", async () => {
+    window.innerWidth = 1440;
+    renderRoute("/article/a1");
+
+    expect(await screen.findByText("Back to list")).toBeInTheDocument();
+    expect(await screen.findByText("Full article body")).toBeInTheDocument();
+  });
+
+  it("restores list search and scroll after returning from detail", async () => {
+    renderRoute("/");
+
+    const search = await screen.findByPlaceholderText("Search saved articles");
+    await userEvent.type(search, "react");
+
+    const scrollContainer = await screen.findByTestId("article-list-scroll");
+    scrollContainer.scrollTop = 140;
+
+    await userEvent.click(await screen.findByRole("link", { name: /React RSS Reader/i }));
+    expect(await screen.findByText("Full article body")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("link", { name: /Back to list/i }));
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("Search saved articles")).toHaveValue("react");
+      expect(screen.getByTestId("article-list-scroll").scrollTop).toBe(140);
+    });
   });
 });

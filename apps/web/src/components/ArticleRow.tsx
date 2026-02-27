@@ -19,11 +19,18 @@ function formatDate(value: string | null) {
 interface ArticleRowProps {
   article: SearchResult;
   active: boolean;
+  onOpen: (articleId: string) => void;
 }
 
-export function ArticleRow({ article, active }: ArticleRowProps) {
+export function ArticleRow({ article, active, onOpen }: ArticleRowProps) {
   return (
-    <Link to={`/article/${article.id}`} className="block">
+    <Link
+      to={`/article/${article.id}`}
+      className="block"
+      onClick={() => {
+        onOpen(article.id);
+      }}
+    >
       <Panel
         className={`overflow-hidden border transition ${
           active ? "border-accent/70 bg-panel-muted" : "border-border/70 hover:border-accent/40"
