@@ -1,7 +1,7 @@
 import { Readability } from "@mozilla/readability";
 import { domainFromUrl, normalizeUrl, type ExtractedArticle } from "@reader/core";
 import * as cheerio from "cheerio";
-import { JSDOM } from "jsdom";
+import { JSDOM, VirtualConsole } from "jsdom";
 import sanitizeHtml from "sanitize-html";
 
 export class ImportServiceError extends Error {
@@ -15,6 +15,7 @@ export class ImportServiceError extends Error {
 }
 
 const DEFAULT_TIMEOUT_MS = 12_000;
+const CSS_PARSE_ERROR_MESSAGE = "Could not parse CSS stylesheet";
 
 const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [
@@ -109,7 +110,17 @@ export async function extractArticleFromUrl(rawUrl: string): Promise<ExtractedAr
   enforceHtmlContentType(response.headers.get("content-type"));
 
   const html = await response.text();
-  const dom = new JSDOM(html, { url: canonicalUrl });
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on("jsdomError", (error) => {
+    if (error.message.includes(CSS_PARSE_ERROR_MESSAGE)) {
+      return;
+    }
+
+    // Preserve non-CSS jsdom diagnostics for operational debugging.
+    console.error(error);
+  });
+
+  const dom = new JSDOM(html, { url: canonicalUrl, virtualConsole });
   const reader = new Readability(dom.window.document);
   const parsed = reader.parse();
 
